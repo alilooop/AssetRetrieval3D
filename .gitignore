@@ -1,0 +1,13 @@
+.env
+
+*.jsonl
+*.zip 
+
+outputs
+
+reference 
+
+data/*.json
+
+
+**/__pycache__

@@ -1,0 +1,17 @@
+dashscope
+openai 
+python-dotenv
+torch 
+transformers 
+huggingface-hub 
+ruff 
+pgvector 
+accelerate
+fastapi
+uvicorn[standard]
+gradio
+psycopg2-binary
+numpy
+pillow
+tqdm
+requests
