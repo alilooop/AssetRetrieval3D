@@ -9,7 +9,6 @@ This script:
 """
 import sys
 import logging
-import pickle
 import json
 import time
 from pathlib import Path
@@ -25,6 +24,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import config
 from utils.data_loader import DataLoader
 from utils.image_utils import sample_viewpoint_images
+from utils.h5_utils import (
+    save_text_embeddings_h5,
+    save_multimodal_text_embeddings_h5,
+    load_multimodal_text_embeddings_h5,
+    load_text_embeddings_h5
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -444,19 +449,22 @@ class QwenEmbedder:
         text_cn_embeddings: Dict[str, np.ndarray],
         image_embeddings: Dict[str, np.ndarray]
     ):
-        """Save embeddings to disk."""
-        logger.info("Saving embeddings to disk...")
+        """Save embeddings to disk in HDF5 format."""
+        logger.info("Saving embeddings to HDF5 files...")
         
-        with open(config.QWEN_TEXT_EN_EMBEDDINGS_FILE, 'wb') as f:
-            pickle.dump(text_en_embeddings, f)
-        logger.info(f"Saved English text embeddings to {config.QWEN_TEXT_EN_EMBEDDINGS_FILE}")
+        # Save text embeddings (English and Chinese in one file)
+        save_multimodal_text_embeddings_h5(
+            config.QWEN_TEXT_EMBEDDINGS_FILE,
+            text_en_embeddings,
+            text_cn_embeddings
+        )
+        logger.info(f"Saved text embeddings to {config.QWEN_TEXT_EMBEDDINGS_FILE}")
         
-        with open(config.QWEN_TEXT_CN_EMBEDDINGS_FILE, 'wb') as f:
-            pickle.dump(text_cn_embeddings, f)
-        logger.info(f"Saved Chinese text embeddings to {config.QWEN_TEXT_CN_EMBEDDINGS_FILE}")
-        
-        with open(config.QWEN_IMAGE_EMBEDDINGS_FILE, 'wb') as f:
-            pickle.dump(image_embeddings, f)
+        # Save image embeddings
+        save_text_embeddings_h5(
+            config.QWEN_IMAGE_EMBEDDINGS_FILE,
+            image_embeddings
+        )
         logger.info(f"Saved image embeddings to {config.QWEN_IMAGE_EMBEDDINGS_FILE}")
     
     def load_existing_embeddings(self) -> tuple:
@@ -465,19 +473,12 @@ class QwenEmbedder:
         text_cn = None
         images = None
         
-        if config.QWEN_TEXT_EN_EMBEDDINGS_FILE.exists():
-            with open(config.QWEN_TEXT_EN_EMBEDDINGS_FILE, 'rb') as f:
-                text_en = pickle.load(f)
-            logger.info(f"Loaded {len(text_en)} English text embeddings")
-        
-        if config.QWEN_TEXT_CN_EMBEDDINGS_FILE.exists():
-            with open(config.QWEN_TEXT_CN_EMBEDDINGS_FILE, 'rb') as f:
-                text_cn = pickle.load(f)
-            logger.info(f"Loaded {len(text_cn)} Chinese text embeddings")
+        if config.QWEN_TEXT_EMBEDDINGS_FILE.exists():
+            text_en, text_cn = load_multimodal_text_embeddings_h5(config.QWEN_TEXT_EMBEDDINGS_FILE)
+            logger.info(f"Loaded {len(text_en)} English and {len(text_cn)} Chinese text embeddings")
         
         if config.QWEN_IMAGE_EMBEDDINGS_FILE.exists():
-            with open(config.QWEN_IMAGE_EMBEDDINGS_FILE, 'rb') as f:
-                images = pickle.load(f)
+            images = load_text_embeddings_h5(config.QWEN_IMAGE_EMBEDDINGS_FILE)
             logger.info(f"Loaded {len(images)} image embeddings")
         
         return text_en, text_cn, images

@@ -28,20 +28,13 @@ BATCH_JSONL_DIR = OUTPUTS_DIR / "batch_jsonl"
 for dir_path in [OUTPUTS_DIR, EMBEDDINGS_DIR, TRANSLATION_DIR, BATCH_JSONL_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
-# SigLip embeddings output
-SIGLIP_TEXT_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "siglip_text_embeddings.pkl"
-SIGLIP_IMAGE_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "siglip_image_embeddings.pkl"
+# SigLip embeddings output (HDF5 format)
+SIGLIP_TEXT_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "siglip_text_embeddings.h5"
+SIGLIP_IMAGE_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "siglip_image_embeddings.h5"
 
-# SigLip memmap outputs for distributed inference
-SIGLIP_TEXT_EMBEDDINGS_MEMMAP = EMBEDDINGS_DIR / "siglip_text_embeddings.npy"
-SIGLIP_IMAGE_EMBEDDINGS_MEMMAP = EMBEDDINGS_DIR / "siglip_image_embeddings.npy"
-SIGLIP_TEXT_METADATA_FILE = EMBEDDINGS_DIR / "siglip_text_metadata.json"
-SIGLIP_IMAGE_METADATA_FILE = EMBEDDINGS_DIR / "siglip_image_metadata.json"
-
-# Qwen embeddings output
-QWEN_TEXT_EN_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "qwen_text_en_embeddings.pkl"
-QWEN_TEXT_CN_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "qwen_text_cn_embeddings.pkl"
-QWEN_IMAGE_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "qwen_image_embeddings.pkl"
+# Qwen embeddings output (HDF5 format)
+QWEN_TEXT_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "qwen_text_embeddings.h5"
+QWEN_IMAGE_EMBEDDINGS_FILE = EMBEDDINGS_DIR / "qwen_image_embeddings.h5"
 
 # ==================== API Configuration ====================
 # Qwen/DashScope API configuration

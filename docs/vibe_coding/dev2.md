@@ -1,0 +1,3 @@
+Seems that in current embedding saving logics using npy, I can't easily query the text embedding or image embeddings using objaverse IDs, could you also store the objaverse ID, either in the form of npy, npz, or h5? @scripts/02_embed_siglip.py 
+Besides, I think it's also better to store embeddings in .h5 when embedding text/images using qwen? @scripts/03_embed_qwen.py  Since pickle may not be friendly for randomly query and also may not be suitable for our large-scale case (2M+ images), 
+If you choose to store in other formats, I think you should also update the logics to populate databases in @scripts/04_populate_database.py  

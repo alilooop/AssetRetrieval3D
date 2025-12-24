@@ -11,7 +11,6 @@ This script:
 """
 import sys
 import logging
-import pickle
 from pathlib import Path
 from typing import Dict, List
 import numpy as np
@@ -23,6 +22,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import config
 from utils.db_utils import get_siglip_db, get_qwen_db, DatabaseManager
 from utils.data_loader import DataLoader
+from utils.h5_utils import (
+    load_text_embeddings_h5,
+    load_image_embeddings_h5,
+    load_multimodal_text_embeddings_h5
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -227,7 +231,7 @@ class DatabasePopulator:
         text_cn_embeddings: Dict[str, np.ndarray]
     ):
         """Insert Qwen text embeddings."""
-        logger.info(f"Inserting Qwen text embeddings...")
+        logger.info("Inserting Qwen text embeddings...")
         
         with db.get_connection() as conn:
             cursor = conn.cursor()
@@ -304,17 +308,16 @@ class DatabasePopulator:
         """Populate SigLip database with embeddings."""
         logger.info("\n=== Populating SigLip Database ===")
         
-        # Load embeddings
-        logger.info("Loading SigLip embeddings from disk...")
-        with open(config.SIGLIP_TEXT_EMBEDDINGS_FILE, 'rb') as f:
-            text_embeddings = pickle.load(f)
-        
-        with open(config.SIGLIP_IMAGE_EMBEDDINGS_FILE, 'rb') as f:
-            image_embeddings = pickle.load(f)
+        # Load embeddings from HDF5
+        logger.info("Loading SigLip embeddings from HDF5...")
+        text_embeddings = load_text_embeddings_h5(config.SIGLIP_TEXT_EMBEDDINGS_FILE)
+        image_embeddings = load_image_embeddings_h5(config.SIGLIP_IMAGE_EMBEDDINGS_FILE)
         
         # Get embedding dimension
         embedding_dim = next(iter(text_embeddings.values())).shape[0]
         logger.info(f"Embedding dimension: {embedding_dim}")
+        logger.info(f"Loaded {len(text_embeddings)} text embeddings")
+        logger.info(f"Loaded image embeddings for {len(image_embeddings)} assets")
         
         # Initialize database
         db = get_siglip_db()
@@ -340,20 +343,19 @@ class DatabasePopulator:
         """Populate Qwen database with embeddings."""
         logger.info("\n=== Populating Qwen Database ===")
         
-        # Load embeddings
-        logger.info("Loading Qwen embeddings from disk...")
-        with open(config.QWEN_TEXT_EN_EMBEDDINGS_FILE, 'rb') as f:
-            text_en_embeddings = pickle.load(f)
-        
-        with open(config.QWEN_TEXT_CN_EMBEDDINGS_FILE, 'rb') as f:
-            text_cn_embeddings = pickle.load(f)
-        
-        with open(config.QWEN_IMAGE_EMBEDDINGS_FILE, 'rb') as f:
-            image_embeddings = pickle.load(f)
+        # Load embeddings from HDF5
+        logger.info("Loading Qwen embeddings from HDF5...")
+        text_en_embeddings, text_cn_embeddings = load_multimodal_text_embeddings_h5(
+            config.QWEN_TEXT_EMBEDDINGS_FILE
+        )
+        image_embeddings = load_text_embeddings_h5(config.QWEN_IMAGE_EMBEDDINGS_FILE)
         
         # Get embedding dimension
         embedding_dim = next(iter(text_en_embeddings.values())).shape[0]
         logger.info(f"Embedding dimension: {embedding_dim}")
+        logger.info(f"Loaded {len(text_en_embeddings)} English text embeddings")
+        logger.info(f"Loaded {len(text_cn_embeddings)} Chinese text embeddings")
+        logger.info(f"Loaded {len(image_embeddings)} image embeddings")
         
         # Initialize database
         db = get_qwen_db()
@@ -383,8 +385,8 @@ class DatabasePopulator:
             logger.error("Please run 02_embed_siglip.py first")
             return
         
-        if not config.QWEN_TEXT_EN_EMBEDDINGS_FILE.exists():
-            logger.error(f"Qwen embeddings not found: {config.QWEN_TEXT_EN_EMBEDDINGS_FILE}")
+        if not config.QWEN_TEXT_EMBEDDINGS_FILE.exists():
+            logger.error(f"Qwen embeddings not found: {config.QWEN_TEXT_EMBEDDINGS_FILE}")
             logger.error("Please run 03_embed_qwen.py first")
             return
         
