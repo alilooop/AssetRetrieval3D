@@ -18,6 +18,7 @@ class DataLoader:
         self.captions_en: Optional[Dict[str, str]] = None
         self.captions_cn: Optional[Dict[str, str]] = None
         self.gobjaverse_to_objaverse: Optional[Dict[str, str]] = None
+        self.gobjaverse_to_objaverse_with_image: Optional[Dict[str, str]] = None
         self.asset_ids: Optional[List[str]] = None
     
     def load_english_captions(self) -> Dict[str, str]:
@@ -50,6 +51,15 @@ class DataLoader:
                 self.gobjaverse_to_objaverse = json.load(f)
             logger.info(f"Loaded {len(self.gobjaverse_to_objaverse)} ID mappings")
         return self.gobjaverse_to_objaverse
+
+    def load_index_mapping_with_image(self) -> Dict[str, str]:
+        """Load gobjaverse ID to objaverse ID mapping."""
+        if self.gobjaverse_to_objaverse_with_image is None:
+            logger.info(f"Loading index mapping from {config.INDEX_MAPPING_FILE_WITH_IMAGE}")
+            with open(config.INDEX_MAPPING_FILE_WITH_IMAGE, 'r', encoding='utf-8') as f:
+                self.gobjaverse_to_objaverse_with_image = json.load(f)
+            logger.info(f"Loaded {len(self.gobjaverse_to_objaverse_with_image)} ID mappings")
+        return self.gobjaverse_to_objaverse_with_image
     
     def get_asset_ids(self, max_assets: Optional[int] = None) -> List[str]:
         """
@@ -80,7 +90,7 @@ class DataLoader:
             List of asset IDs that exist in gobjaverse (have images)
         """
         captions = self.load_english_captions()
-        gobjaverse_mapping = self.load_index_mapping()
+        gobjaverse_mapping = self.load_index_mapping_with_image()
         
         # Filter to only assets that exist in gobjaverse
         asset_ids_with_images = sorted([
@@ -110,6 +120,26 @@ class DataLoader:
         if objaverse_path:
             # Extract objaverse ID from path like "000-001/bc2fe4e89ff44b8a9b54614346f7ad29.glb"
             return Path(objaverse_path).stem
+        return None
+
+    def get_objaverse_path_info(self, gobjaverse_id: str) -> Optional[Dict[str, str]]:
+        """
+        Get objaverse path info for an asset.
+        
+        Args:
+            gobjaverse_id: Asset ID like "0/10023"
+        
+        Returns:
+            Dict with 'objaverse_dir' and 'objaverse_id', or None if not found
+        """
+        mapping = self.load_index_mapping()
+        path_str = mapping.get(gobjaverse_id)
+        if path_str:
+            path = Path(path_str)
+            return {
+                'objaverse_dir': path.parent.name,
+                'objaverse_id': path.stem
+            }
         return None
     
     def save_chinese_captions(self, captions_cn: Dict[str, str]):

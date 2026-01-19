@@ -1,0 +1,6 @@
+Seems that you are using inconsistent keys for storing the embeddings in siglip @scripts/02_embed_siglip.py and qwen @scripts/03_embed_qwen.py . For example, for the text embeddings, you use asset id from objaverse, while for the image embeddings, you use the asset id from gobjaverse (which is only a subset of objaverse). This will leads to inconsistent primary key when populating the database @scripts/04_populate_database.py . Please justify whether I am right 
+
+As you can see in @.env.example, there are two placeholders for the base url. For each asset id from the database, you should first query the real subpath using @gobjaverse_index_to_objaverse.json, which gives a form "0/10023": "000-000/00184eec45fe45ffa3826e9202fe7306.glb", and you should then parse it into the base url for downloading the asset.
+Besides, seems that this for-loop in the client for getting valid ids with images is highly inefficient, and you may refer to the dataloader func.
+@utils/data_loader.py:162-174 @test_client.py:149-160 
+Don't modify irrelevant code, don't create markdown/readme files.

@@ -12,7 +12,7 @@ Features:
 import sys
 import logging
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import List, Tuple
 import requests
 import tempfile
 import re
@@ -55,7 +55,8 @@ def search_by_text(
     query: str,
     algorithm: str,
     cross_modal: bool,
-    top_k: int
+    top_k: int,
+    high_quality_only: bool
 ) -> Tuple[str, str, str]:
     """
     Search by text query.
@@ -65,13 +66,14 @@ def search_by_text(
         algorithm: 'SigLip' or 'Qwen'
         cross_modal: Enable cross-modal search
         top_k: Number of results
+        high_quality_only: Filter for high quality assets
     
     Returns:
-        Tuple of (3D model path, results HTML, status message)
+        Tuple of (3D model path, results HTML, status message, results list, dropdown update)
     """
     try:
         if not query.strip():
-            return None, "", "Please enter a search query"
+            return None, "", "Please enter a search query", [], gr.Dropdown(choices=[], value=None)
         
         # Detect language
         language = detect_language(query)
@@ -81,9 +83,9 @@ def search_by_text(
         
         # Check if valid combination
         if algo_name == "siglip" and language == "chinese":
-            return None, "", "Error: SigLip does not support Chinese text. Please use Qwen or enter English text."
+            return None, "", "Error: SigLip does not support Chinese text. Please use Qwen or enter English text.", [], gr.Dropdown(choices=[], value=None)
         
-        logger.info(f"Searching: query='{query[:50]}...', algorithm={algo_name}, language={language}")
+        logger.info(f"Searching: query='{query[:50]}...', algorithm={algo_name}, language={language}, hq={high_quality_only}")
         
         # Call API
         response = requests.post(
@@ -93,44 +95,53 @@ def search_by_text(
                 "algorithm": algo_name,
                 "language": language,
                 "cross_modal": cross_modal,
-                "top_k": top_k
+                "top_k": top_k,
+                "high_quality_only": high_quality_only
             },
             timeout=60
         )
         
         if response.status_code != 200:
             error_msg = response.json().get("detail", "Unknown error")
-            return None, "", f"Search failed: {error_msg}"
+            return None, "", f"Search failed: {error_msg}", [], gr.Dropdown(choices=[], value=None)
         
         results = response.json()
+        results_list = results.get("results", [])
         
         # Format results
-        if not results["results"]:
-            return None, "", "No results found"
+        if not results_list:
+            return None, "", "No results found", [], gr.Dropdown(choices=[], value=None)
         
         # Get top result for 3D viewer
-        top_result = results["results"][0]
+        top_result = results_list[0]
         model_url = top_result.get("model_url")
         
         # Create results HTML
-        results_html = format_results(results["results"], language)
+        results_html = format_results(results_list, language)
         
-        status_msg = f"Found {len(results['results'])} results (Language: {language.title()}, Algorithm: {algorithm}, Cross-modal: {cross_modal})"
+        status_msg = f"Found {len(results_list)} results (Language: {language.title()}, Algorithm: {algorithm}, HQ: {high_quality_only})"
         
-        return model_url, results_html, status_msg
+        # Create dropdown choices
+        choices = []
+        for i, r in enumerate(results_list):
+            caption = r.get('caption_en') or r.get('caption_cn') or r.get('asset_id', 'Unknown')
+            choices.append((f"#{i+1}: {caption[:50]}...", i))
+            
+        return model_url, results_html, status_msg, results_list, gr.Dropdown(choices=choices, value=0)
     
     except requests.exceptions.ConnectionError:
-        return None, "", "Error: Cannot connect to backend API. Make sure the backend server is running."
+        return None, "", "Error: Cannot connect to backend API. Make sure the backend server is running.", [], gr.Dropdown(choices=[], value=None)
     except Exception as e:
         logger.error(f"Search failed: {e}", exc_info=True)
-        return None, "", f"Error: {str(e)}"
+        return None, "", f"Error: {str(e)}", [], gr.Dropdown(choices=[], value=None)
 
 
 def search_by_image(
     image,
     algorithm: str,
     cross_modal: bool,
-    top_k: int
+    top_k: int,
+    high_quality_only: bool
 ) -> Tuple[str, str, str]:
     """
     Search by image upload.
@@ -140,18 +151,19 @@ def search_by_image(
         algorithm: 'SigLip' or 'Qwen'
         cross_modal: Enable cross-modal search
         top_k: Number of results
+        high_quality_only: Filter for high quality assets
     
     Returns:
-        Tuple of (3D model path, results HTML, status message)
+        Tuple of (3D model path, results HTML, status message, results list, dropdown update)
     """
     try:
         if image is None:
-            return None, "", "Please upload an image"
+            return None, "", "Please upload an image", [], gr.Dropdown(choices=[], value=None)
         
         # Map algorithm name
         algo_name = algorithm.lower()
         
-        logger.info(f"Searching by image: algorithm={algo_name}, cross_modal={cross_modal}")
+        logger.info(f"Searching by image: algorithm={algo_name}, cross_modal={cross_modal}, hq={high_quality_only}")
         
         # Save image to temporary file
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
@@ -169,7 +181,8 @@ def search_by_image(
             params = {
                 'algorithm': algo_name,
                 'cross_modal': cross_modal,
-                'top_k': top_k
+                'top_k': top_k,
+                'high_quality_only': high_quality_only
             }
             response = requests.post(
                 f"{API_BASE_URL}/search/image",
@@ -183,30 +196,37 @@ def search_by_image(
         
         if response.status_code != 200:
             error_msg = response.json().get("detail", "Unknown error")
-            return None, "", f"Search failed: {error_msg}"
+            return None, "", f"Search failed: {error_msg}", [], gr.Dropdown(choices=[], value=None)
         
         results = response.json()
+        results_list = results.get("results", [])
         
         # Format results
-        if not results["results"]:
-            return None, "", "No results found"
+        if not results_list:
+            return None, "", "No results found", [], gr.Dropdown(choices=[], value=None)
         
         # Get top result for 3D viewer
-        top_result = results["results"][0]
+        top_result = results_list[0]
         model_url = top_result.get("model_url")
         
         # Create results HTML
-        results_html = format_results(results["results"], "english")
+        results_html = format_results(results_list, "english")
         
-        status_msg = f"Found {len(results['results'])} results (Algorithm: {algorithm}, Cross-modal: {cross_modal})"
+        status_msg = f"Found {len(results_list)} results (Algorithm: {algorithm}, HQ: {high_quality_only})"
         
-        return model_url, results_html, status_msg
+        # Create dropdown choices
+        choices = []
+        for i, r in enumerate(results_list):
+            caption = r.get('caption_en') or r.get('caption_cn') or r.get('asset_id', 'Unknown')
+            choices.append((f"#{i+1}: {caption[:50]}...", i))
+            
+        return model_url, results_html, status_msg, results_list, gr.Dropdown(choices=choices, value=0)
     
     except requests.exceptions.ConnectionError:
-        return None, "", "Error: Cannot connect to backend API. Make sure the backend server is running."
+        return None, "", "Error: Cannot connect to backend API. Make sure the backend server is running.", [], gr.Dropdown(choices=[], value=None)
     except Exception as e:
         logger.error(f"Search failed: {e}", exc_info=True)
-        return None, "", f"Error: {str(e)}"
+        return None, "", f"Error: {str(e)}", [], gr.Dropdown(choices=[], value=None)
 
 
 def format_results(results: List[dict], language: str = "english") -> str:
@@ -257,9 +277,9 @@ def format_results(results: List[dict], language: str = "english") -> str:
 def create_ui():
     """Create Gradio UI."""
     
-    with gr.Blocks(title="3D Asset Retrieval System", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(title="3D Asset Retrieval(Objaverse Demo)", theme=gr.themes.Soft()) as demo:
         gr.Markdown("""
-        # 🎨 3D Asset Retrieval System
+        # 🎨 3D Asset Retrieval(Objaverse Demo)
         
         Search through millions of 3D assets using text or images with multi-modal embeddings.
         
@@ -267,7 +287,7 @@ def create_ui():
         - 🔤 Text search in English and Chinese
         - 🖼️ Image-based search
         - 🔄 Cross-modal retrieval (text↔image)
-        - 🤖 Dual algorithms: SigLip and Qwen
+        - 🤖 Dual algorithms Supported: SigLip and Qwen
         """)
         
         with gr.Row():
@@ -277,7 +297,7 @@ def create_ui():
                 # Algorithm selection
                 algorithm = gr.Radio(
                     choices=["SigLip", "Qwen"],
-                    value="SigLip",
+                    value="Qwen",
                     label="Algorithm",
                     info="SigLip: English only, fast. Qwen: English + Chinese, slower."
                 )
@@ -287,6 +307,13 @@ def create_ui():
                     label="Enable Cross-Modal Search",
                     value=False,
                     info="Search images with text or text with images"
+                )
+                
+                # High quality toggle
+                high_quality_only = gr.Checkbox(
+                    label="High Quality Only",
+                    value=False,
+                    info="Search only high quality assets"
                 )
                 
                 # Top-K results
@@ -330,9 +357,19 @@ def create_ui():
                     lines=1
                 )
                 
+                # Result selection
+                results_state = gr.State([])
+                result_selector = gr.Dropdown(
+                    label="Select Result to View in 3D",
+                    choices=[],
+                    type="index",
+                    interactive=True,
+                    info="Choose a result from the list to display below"
+                )
+                
                 # 3D Model viewer
                 model_3d = gr.Model3D(
-                    label="Top Result - 3D Model",
+                    label="3D Model Viewer",
                     height=400
                 )
                 
@@ -341,14 +378,20 @@ def create_ui():
                     label="All Results"
                 )
         
+        def update_model_from_dropdown(index, results):
+            """Update 3D model viewer when a result is selected from dropdown."""
+            if results and index is not None and 0 <= index < len(results):
+                return results[index].get("model_url")
+            return None
+
         gr.Markdown("""
         ---
         ### 💡 Usage Tips:
         
+        - **Click to View**: Select a result from the dropdown to update the 3D viewer.
         - **SigLip**: Best for English text and fast results
         - **Qwen**: Supports Chinese text and multi-image embeddings
         - **Cross-modal**: Find images from text descriptions or vice versa
-        - **Top result**: Displayed in 3D viewer above
         - **Model URL**: Currently uses placeholder - configure BASE_URL_TEMPLATE in config
         
         ### 🔧 Notes:
@@ -360,14 +403,20 @@ def create_ui():
         # Connect event handlers
         text_search_btn.click(
             fn=search_by_text,
-            inputs=[text_query, algorithm, cross_modal, top_k],
-            outputs=[model_3d, results_display, status_msg]
+            inputs=[text_query, algorithm, cross_modal, top_k, high_quality_only],
+            outputs=[model_3d, results_display, status_msg, results_state, result_selector]
         )
         
         image_search_btn.click(
             fn=search_by_image,
-            inputs=[image_query, algorithm, cross_modal, top_k],
-            outputs=[model_3d, results_display, status_msg]
+            inputs=[image_query, algorithm, cross_modal, top_k, high_quality_only],
+            outputs=[model_3d, results_display, status_msg, results_state, result_selector]
+        )
+        
+        result_selector.change(
+            fn=update_model_from_dropdown,
+            inputs=[result_selector, results_state],
+            outputs=[model_3d]
         )
     
     return demo
@@ -381,7 +430,7 @@ def main():
     demo.launch(
         server_name=config.FRONTEND_HOST,
         server_port=config.FRONTEND_PORT,
-        share=False
+        share=True
     )
 
 

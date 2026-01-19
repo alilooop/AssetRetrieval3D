@@ -1,20 +1,27 @@
-# 3D Asset Retrieval System
+# 3D Asset Retrieval Demo
 
-A comprehensive multi-modal retrieval system for searching through ~1 million 3D assets using text (English/Chinese) and images.
+![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
+![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)
+[![Gradio](https://img.shields.io/badge/Gradio-Demo-orange.svg)](https://17d9a08e2e8b57de04.gradio.live)
+[![中文](https://img.shields.io/badge/中文-README-blue.svg)](README_zh.md)
 
-## Features
+A simple multi-modal 3D asset retrieval system. This repo uses objaverse as a simple demonstration, while it can generalize and scale to any 3D dataset.
 
-- 🔤 **Text Search**: Query in English or Chinese
-- 🖼️ **Image Search**: Find similar 3D assets using images
-- 🔄 **Cross-Modal Retrieval**: Search images with text or text with images
-- 🤖 **Dual Algorithms**:
-  - **SigLip**: Fast, English-only, per-image embeddings
-  - **Qwen**: Multi-lingual, multi-image embeddings
-- 📊 **Vector Database**: PostgreSQL with pgvector for efficient similarity search
-- 🌐 **Web Interface**: Beautiful Gradio UI with 3D model viewer
-- 🚀 **REST API**: FastAPI backend for programmatic access
+![Demo](./assets/asset_retrieval_demo.gif)
 
-## Architecture
+## 1. Features
+
+- **Text Search**: Query in English or Chinese
+- **Image Search**: Find similar 3D assets using images
+- **Cross-Modal Retrieval**: Search images with text or text with images
+- **Dual Algorithms**:
+  - **SigLip**: Fast, English-only, per-image embeddings. Medium Retrieval Quality(WIP).
+  - **Qwen3-VL-Embedding**: Multi-lingual, *multi-image* embeddings. High Retrieval Quality(Recommended).
+- **Vector Database**: PostgreSQL with pgvector for efficient similarity search
+- **Web Interface**: Beautiful Gradio UI with 3D model viewer
+- **REST API**: FastAPI backend for programmatic access
+
+## 2. Architecture
 
 ```
 ┌─────────────────┐
@@ -46,24 +53,32 @@ A comprehensive multi-modal retrieval system for searching through ~1 million 3D
                          └──────────────────┘
 ```
 
-## Prerequisites
 
+
+## 3. Get Started
+### Prerequisites
 - Python 3.8+
 - PostgreSQL 12+ with pgvector extension
 - NVIDIA GPU (recommended for SigLip)
 - DashScope API key (for Qwen)
-
-## Installation
-
-1. **Clone the repository** (if applicable)
+### Installation
+1. **Clone the repository** 
+```bash 
+git clone https://github.com/3DSceneAgent/AssetRetrieval3D
+```
 
 2. **Install dependencies**:
    ```bash
+   # optionally create new env 
+   # conda create -n asset_retrieval python=3.10
+   # conda activate asset_retrieval
    pip install -r requirements.txt
    ```
 
 3. **Set up environment variables**:
    ```bash
+   cp .env.example .env 
+   # setup variables
    export DASHSCOPE_API_KEY="your-api-key"
    export DB_HOST="localhost"
    export DB_PORT="5432"
@@ -78,7 +93,7 @@ A comprehensive multi-modal retrieval system for searching through ~1 million 3D
      CREATE EXTENSION vector;
      ```
 
-## Usage
+## 4. Usage
 
 ### Step 0: Configure Settings
 
@@ -102,7 +117,7 @@ This creates `data/text_captions_cap3d_cn.json`.
 
 ### Step 2: Generate Embeddings
 
-#### SigLip Embeddings
+#### (Optional) SigLip Embeddings
 
 ```bash
 python scripts/02_embed_siglip.py
@@ -112,7 +127,7 @@ This generates:
 - Text embeddings (English only)
 - Image embeddings (one per viewpoint)
 
-#### Qwen Embeddings
+#### (Optional) Qwen Embeddings
 
 ```bash
 python scripts/03_embed_qwen.py
@@ -159,35 +174,37 @@ python frontend/gradio_app.py
 
 The UI will be available at `http://localhost:7860`
 
-## API Endpoints
+### Step 6: Test Backend with Client Script
 
-### Text Search
+A comprehensive test client is provided to verify the backend service:
+
 ```bash
-POST /search/text
-{
-  "query": "a red car",
-  "algorithm": "siglip",
-  "language": "english",
-  "cross_modal": false,
-  "top_k": 10
-}
+# Run all tests with default settings
+python test_client.py
+
+# Test only SigLip algorithm
+python test_client.py --algorithm siglip
+
+# Test only image search
+python test_client.py --test-type image
+
+# Run with verbose output (shows all results)
+python test_client.py --verbose --num-tests 1
+
+# Test against remote backend
+python test_client.py --backend-url http://remote-server:8000
 ```
 
-### Image Search
-```bash
-POST /search/image
-- file: image file
-- algorithm: "siglip" or "qwen"
-- cross_modal: true/false
-- top_k: number of results
-```
+The test client will:
+- Check backend health
+- Test text search (English and Chinese for Qwen)
+- Test image search using real assets from the database
+- Test both uni-modal and cross-modal search
+- Display results with similarity scores and captions
+ /search/text
 
-### Health Check
-```bash
-GET /health
-```
 
-## Configuration Options
+## 5. Configuration Options
 
 ### `config.py` Key Settings
 
@@ -197,8 +214,8 @@ GET /health
 - **QWEN_NUM_IMAGES**: Number of images per asset for Qwen (default: 8)
 - **DEFAULT_TOP_K**: Default number of search results (default: 10)
 
-### Algorithm Comparison
-
+## 6. Algorithms
+### Embedding Algoirthms
 | Feature | SigLip | Qwen |
 |---------|--------|------|
 | Text Languages | English only | English + Chinese |
@@ -206,62 +223,23 @@ GET /health
 | Speed | Fast | Slower (API calls) |
 | Requires GPU | Yes (local) | No (API) |
 | Cross-modal | Yes | Yes |
-
-## Search Modes
-
-### Inner-Modal Search
+### Search Modes
+#### Inner-Modal Search
 - **Text → Text**: Find assets with similar descriptions
 - **Image → Image**: Find visually similar assets
-
-### Cross-Modal Search
+#### Cross-Modal Search
 - **Text → Image**: Find images matching text description
 - **Image → Text**: Find text descriptions matching image
 
-## Debugging Tips
 
-1. **Start Small**: Set `MAX_ASSETS=100` in config for testing
-2. **Check Logs**: All scripts have detailed logging
-3. **Verify Data**:
-   - Run `python config.py` to validate configuration
-   - Check if embedding files exist in `outputs/embeddings/`
-4. **Test Database**:
-   - Run `python utils/db_utils.py` to test connections
-5. **API Testing**: Use the `/health` endpoint to check status
-
-## Performance Optimization
-
-- **Vector Indexes**: Automatically created with IVFFLAT
-- **Connection Pooling**: Database connections are pooled
-- **Batch Processing**: All operations support batching
-- **GPU Acceleration**: SigLip uses GPU when available
-
-## Troubleshooting
-
-### "Connection refused" errors
-- Ensure PostgreSQL is running
-- Check database credentials in config
-- Verify pgvector extension is installed
-
-### "SigLip model loading failed"
-- Ensure transformers and torch are installed
-- Check GPU availability with `torch.cuda.is_available()`
-- Try CPU mode if GPU unavailable
-
-### "API key errors"
-- Set DASHSCOPE_API_KEY environment variable
-- Verify API key is valid
-
-### "No images found"
-- Check that `data/gobjaverse/` directory exists
-- Verify image paths in the data
-
-## File Structure
+## 7. File Structure
 
 ```
 objaverse_retrieval/
 ├── config.py                 # Configuration
 ├── requirements.txt          # Dependencies
 ├── README.md                # This file
+├── test_client.py           # Backend test client
 │
 ├── data/                    # Data files
 │   ├── text_captions_cap3d.json
@@ -295,13 +273,11 @@ objaverse_retrieval/
 ```
 
 ## License
-
-[Your License Here]
+The code and application is licensed under [Apache2.0 License](LICENSE).
 
 ## Acknowledgments
-
-- SigLip model from Google
-- Qwen models from Alibaba Cloud
-- Objaverse dataset
-- pgvector extension
+* [objaverse](https://objaverse.allenai.org/)
+* [objaverse_filter from kiui](https://github.com/ashawkey/objaverse_filter)
+* [gobjaverse](https://github.com/modelscope/richdreamer)
+* [Cap3D](https://github.com/crockwell/Cap3D/)
 

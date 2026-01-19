@@ -30,7 +30,8 @@ class VectorSearch:
         query_embedding: np.ndarray,
         algorithm: str,
         language: str = "english",
-        top_k: int = 10
+        top_k: int = 10,
+        high_quality_only: bool = False
     ) -> List[Tuple[str, float]]:
         """
         Search text embeddings for similar assets.
@@ -40,6 +41,7 @@ class VectorSearch:
             algorithm: 'siglip' or 'qwen'
             language: 'english' or 'chinese' (only for Qwen)
             top_k: Number of results to return
+            high_quality_only: Filter for high quality assets
         
         Returns:
             List of (asset_id, similarity_score) tuples
@@ -55,11 +57,16 @@ class VectorSearch:
         # Convert embedding to list for SQL
         embedding_list = query_embedding.tolist()
         
+        # Build query
+        where_clause = f"{embedding_column} IS NOT NULL"
+        if high_quality_only:
+            where_clause += " AND is_high_quality = TRUE"
+            
         # Cosine similarity search using <=> operator
         query = f"""
         SELECT asset_id, 1 - ({embedding_column} <=> %s::vector) AS similarity
         FROM text_embeddings
-        WHERE {embedding_column} IS NOT NULL
+        WHERE {where_clause}
         ORDER BY {embedding_column} <=> %s::vector
         LIMIT %s
         """
@@ -75,7 +82,8 @@ class VectorSearch:
     def search_image_embeddings_siglip(
         self,
         query_embedding: np.ndarray,
-        top_k: int = 10
+        top_k: int = 10,
+        high_quality_only: bool = False
     ) -> List[Tuple[str, float]]:
         """
         Search SigLip image embeddings (multiple per asset).
@@ -84,6 +92,7 @@ class VectorSearch:
         Args:
             query_embedding: Query embedding vector
             top_k: Number of results to return
+            high_quality_only: Filter for high quality assets
         
         Returns:
             List of (asset_id, similarity_score) tuples
@@ -91,10 +100,14 @@ class VectorSearch:
         db = self.siglip_db
         embedding_list = query_embedding.tolist()
         
+        # Filter clause
+        where_clause = "WHERE is_high_quality = TRUE" if high_quality_only else ""
+        
         # Find best matching image for each asset, then rank assets
-        query = """
+        query = f"""
         SELECT asset_id, MAX(1 - (embedding <=> %s::vector)) AS max_similarity
         FROM image_embeddings
+        {where_clause}
         GROUP BY asset_id
         ORDER BY max_similarity DESC
         LIMIT %s
@@ -111,7 +124,8 @@ class VectorSearch:
     def search_image_embeddings_qwen(
         self,
         query_embedding: np.ndarray,
-        top_k: int = 10
+        top_k: int = 10,
+        high_quality_only: bool = False
     ) -> List[Tuple[str, float]]:
         """
         Search Qwen image embeddings (one multi-image embedding per asset).
@@ -119,6 +133,7 @@ class VectorSearch:
         Args:
             query_embedding: Query embedding vector
             top_k: Number of results to return
+            high_quality_only: Filter for high quality assets
         
         Returns:
             List of (asset_id, similarity_score) tuples
@@ -126,9 +141,13 @@ class VectorSearch:
         db = self.qwen_db
         embedding_list = query_embedding.tolist()
         
-        query = """
+        # Filter clause
+        where_clause = "WHERE is_high_quality = TRUE" if high_quality_only else ""
+        
+        query = f"""
         SELECT asset_id, 1 - (embedding <=> %s::vector) AS similarity
         FROM image_embeddings
+        {where_clause}
         ORDER BY embedding <=> %s::vector
         LIMIT %s
         """
@@ -148,7 +167,8 @@ class VectorSearch:
         query_type: str,
         language: str = "english",
         cross_modal: bool = False,
-        top_k: int = 10
+        top_k: int = 10,
+        high_quality_only: bool = False
     ) -> List[Dict]:
         """
         Perform vector search based on query type.
@@ -160,6 +180,7 @@ class VectorSearch:
             language: 'english' or 'chinese' (for text queries)
             cross_modal: If True, search opposite modality (text->image or image->text)
             top_k: Number of results to return
+            high_quality_only: Filter for high quality assets
         
         Returns:
             List of result dictionaries with asset_id, similarity, caption, etc.
@@ -169,23 +190,23 @@ class VectorSearch:
             if cross_modal:
                 # Text query -> search image embeddings
                 if algorithm == "siglip":
-                    results = self.search_image_embeddings_siglip(query_embedding, top_k)
+                    results = self.search_image_embeddings_siglip(query_embedding, top_k, high_quality_only)
                 else:
-                    results = self.search_image_embeddings_qwen(query_embedding, top_k)
+                    results = self.search_image_embeddings_qwen(query_embedding, top_k, high_quality_only)
             else:
                 # Text query -> search text embeddings
-                results = self.search_text_embeddings(query_embedding, algorithm, language, top_k)
+                results = self.search_text_embeddings(query_embedding, algorithm, language, top_k, high_quality_only)
         
         elif query_type == "image":
             if cross_modal:
                 # Image query -> search text embeddings
-                results = self.search_text_embeddings(query_embedding, algorithm, language, top_k)
+                results = self.search_text_embeddings(query_embedding, algorithm, language, top_k, high_quality_only)
             else:
                 # Image query -> search image embeddings
                 if algorithm == "siglip":
-                    results = self.search_image_embeddings_siglip(query_embedding, top_k)
+                    results = self.search_image_embeddings_siglip(query_embedding, top_k, high_quality_only)
                 else:
-                    results = self.search_image_embeddings_qwen(query_embedding, top_k)
+                    results = self.search_image_embeddings_qwen(query_embedding, top_k, high_quality_only)
         else:
             raise ValueError(f"Unsupported query_type: {query_type}")
         

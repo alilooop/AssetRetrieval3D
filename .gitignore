@@ -1,4 +1,10 @@
 .env
+.gradio
+.gemini 
+.cursor
+.ruff_cache
+
+.env
 
 *.jsonl
 *.zip 
@@ -7,7 +13,6 @@ outputs
 
 reference 
 
-data/*.json
-
+data/gobjaverse
 
 **/__pycache__

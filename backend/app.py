@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import config
 from backend.embedding_service import EmbeddingService
 from backend.vector_search import VectorSearch
+from utils.data_loader import DataLoader
 
 # Configure logging
 logging.basicConfig(
@@ -51,6 +52,7 @@ app.add_middleware(
 # Initialize services
 embedding_service = EmbeddingService()
 vector_search = VectorSearch()
+data_loader = DataLoader()
 
 
 # Request/Response models
@@ -71,6 +73,7 @@ class TextSearchRequest(BaseModel):
     language: str = Field("english", description="Query language: 'english' or 'chinese'")
     cross_modal: bool = Field(False, description="Enable cross-modal search (text->image)")
     top_k: int = Field(10, ge=1, le=100, description="Number of results to return")
+    high_quality_only: bool = Field(False, description="Filter for high quality assets only")
 
 
 class TextSearchResponse(BaseModel):
@@ -80,6 +83,7 @@ class TextSearchResponse(BaseModel):
     algorithm: str
     language: str
     cross_modal: bool
+    high_quality_only: bool
 
 
 class ImageSearchResponse(BaseModel):
@@ -87,6 +91,7 @@ class ImageSearchResponse(BaseModel):
     results: List[SearchResult]
     algorithm: str
     cross_modal: bool
+    high_quality_only: bool
 
 
 # Endpoints
@@ -123,7 +128,8 @@ async def search_text(request: TextSearchRequest):
     """
     try:
         logger.info(f"Text search: query='{request.query[:50]}...', algorithm={request.algorithm}, "
-                   f"language={request.language}, cross_modal={request.cross_modal}")
+                   f"language={request.language}, cross_modal={request.cross_modal}, "
+                   f"high_quality_only={request.high_quality_only}")
         
         # Validate inputs
         if request.algorithm not in ["siglip", "qwen"]:
@@ -148,15 +154,16 @@ async def search_text(request: TextSearchRequest):
             query_type="text",
             language=request.language,
             cross_modal=request.cross_modal,
-            top_k=request.top_k
+            top_k=request.top_k,
+            high_quality_only=request.high_quality_only
         )
         
         # Add model URLs
         for result in results:
-            if result["objaverse_id"]:
-                result["model_url"] = config.BASE_URL_TEMPLATE.format(
-                    objaverse_id=result["objaverse_id"]
-                )
+            path_info = data_loader.get_objaverse_path_info(result["asset_id"])
+            if path_info:
+                result["objaverse_id"] = path_info["objaverse_id"]
+                result["model_url"] = config.BASE_URL_TEMPLATE.format(**path_info)
         
         search_results = [SearchResult(**r) for r in results]
         
@@ -167,7 +174,8 @@ async def search_text(request: TextSearchRequest):
             query=request.query,
             algorithm=request.algorithm,
             language=request.language,
-            cross_modal=request.cross_modal
+            cross_modal=request.cross_modal,
+            high_quality_only=request.high_quality_only
         )
     
     except Exception as e:
@@ -180,7 +188,8 @@ async def search_image(
     file: UploadFile = File(...),
     algorithm: str = Query("siglip", description="Algorithm: 'siglip' or 'qwen'"),
     cross_modal: bool = Query(False, description="Enable cross-modal search (image->text)"),
-    top_k: int = Query(10, ge=1, le=100, description="Number of results")
+    top_k: int = Query(10, ge=1, le=100, description="Number of results"),
+    high_quality_only: bool = Query(False, description="Filter for high quality assets only")
 ):
     """
     Search for 3D assets using image upload.
@@ -190,13 +199,14 @@ async def search_image(
         algorithm: Algorithm to use ('siglip' or 'qwen')
         cross_modal: Enable cross-modal search
         top_k: Number of results to return
+        high_quality_only: Filter for high quality assets
     
     Returns:
         Search results with asset IDs, similarities, and metadata
     """
     try:
         logger.info(f"Image search: filename={file.filename}, algorithm={algorithm}, "
-                   f"cross_modal={cross_modal}")
+                   f"cross_modal={cross_modal}, high_quality_only={high_quality_only}")
         
         # Validate inputs
         if algorithm not in ["siglip", "qwen"]:
@@ -221,15 +231,16 @@ async def search_image(
             algorithm=algorithm,
             query_type="image",
             cross_modal=cross_modal,
-            top_k=top_k
+            top_k=top_k,
+            high_quality_only=high_quality_only
         )
         
         # Add model URLs
         for result in results:
-            if result["objaverse_id"]:
-                result["model_url"] = config.BASE_URL_TEMPLATE.format(
-                    objaverse_id=result["objaverse_id"]
-                )
+            path_info = data_loader.get_objaverse_path_info(result["asset_id"])
+            if path_info:
+                result["objaverse_id"] = path_info["objaverse_id"]
+                result["model_url"] = config.BASE_URL_TEMPLATE.format(**path_info)
         
         search_results = [SearchResult(**r) for r in results]
         
@@ -238,7 +249,8 @@ async def search_image(
         return ImageSearchResponse(
             results=search_results,
             algorithm=algorithm,
-            cross_modal=cross_modal
+            cross_modal=cross_modal,
+            high_quality_only=high_quality_only
         )
     
     except HTTPException:

@@ -365,10 +365,23 @@ def load_text_embeddings_h5(
         else:
             # Load specific embeddings
             aid_to_idx = {aid: i for i, aid in enumerate(all_asset_ids)}
-            for asset_id in asset_ids:
-                if asset_id in aid_to_idx:
-                    idx = aid_to_idx[asset_id]
-                    embeddings_dict[asset_id] = f['embeddings'][idx]
+            target_indices = []
+            valid_aids = []
+            
+            for aid in asset_ids:
+                if aid in aid_to_idx:
+                    target_indices.append(aid_to_idx[aid])
+                    valid_aids.append(aid)
+            
+            if target_indices:
+                # Sort indices for better HDF5 access performance
+                sorted_idx_and_aids = sorted(zip(target_indices, valid_aids))
+                sorted_indices = [idx for idx, aid in sorted_idx_and_aids]
+                sorted_aids = [aid for idx, aid in sorted_idx_and_aids]
+                
+                # Batch read (h5py supports fancy indexing)
+                batch_embeddings = f['embeddings'][sorted_indices]
+                embeddings_dict = dict(zip(sorted_aids, batch_embeddings))
     
     return embeddings_dict
 
@@ -409,14 +422,77 @@ def load_image_embeddings_h5(
             start_idx = int(record['start_idx'])
             count = int(record['count'])
             
-            # Load all viewpoint embeddings for this asset
-            viewpoint_embeddings = [
-                embeddings_ds[start_idx + i]
-                for i in range(count)
-            ]
-            embeddings_dict[asset_id] = viewpoint_embeddings
+            # Load all viewpoint embeddings for this asset using slicing for performance
+            embeddings_dict[asset_id] = embeddings_ds[start_idx : start_idx + count]
     
     return embeddings_dict
+
+
+def yield_text_embeddings_h5(
+    filepath: Path,
+    batch_size: int = 1000
+):
+    """
+    Yield text embeddings from HDF5 file in batches to save memory.
+    
+    Args:
+        filepath: Path to HDF5 file
+        batch_size: Number of items per yield
+    
+    Yields:
+        Tuple of (list of asset_ids, numpy array of embeddings)
+    """
+    with h5py.File(filepath, 'r') as f:
+        all_asset_ids = f['asset_ids']
+        all_embeddings = f['embeddings']
+        total_items = len(all_asset_ids)
+        
+        for i in range(0, total_items, batch_size):
+            end_idx = min(i + batch_size, total_items)
+            
+            batch_ids = all_asset_ids[i:end_idx]
+            if isinstance(batch_ids[0], bytes):
+                batch_ids = [aid.decode('utf-8') for aid in batch_ids]
+            
+            batch_embeddings = all_embeddings[i:end_idx]
+            yield batch_ids, batch_embeddings
+
+
+def yield_image_embeddings_h5(
+    filepath: Path,
+    batch_size: int = 100
+):
+    """
+    Yield image embeddings from HDF5 file asset by asset.
+    
+    Args:
+        filepath: Path to HDF5 file
+        batch_size: Number of assets per yield
+    
+    Yields:
+        Dictionary mapping asset_id -> list of embeddings for a batch of assets
+    """
+    with h5py.File(filepath, 'r') as f:
+        metadata = f['metadata']
+        embeddings_ds = f['embeddings']
+        total_assets = len(metadata)
+        
+        for i in range(0, total_assets, batch_size):
+            end_idx = min(i + batch_size, total_assets)
+            batch_dict = {}
+            
+            for j in range(i, end_idx):
+                record = metadata[j]
+                asset_id = record['asset_id']
+                if isinstance(asset_id, bytes):
+                    asset_id = asset_id.decode('utf-8')
+                
+                start_idx = int(record['start_idx'])
+                count = int(record['count'])
+                
+                batch_dict[asset_id] = embeddings_ds[start_idx : start_idx + count]
+            
+            yield batch_dict
 
 
 def load_multimodal_text_embeddings_h5(
@@ -550,16 +626,89 @@ def list_asset_ids_h5(
         return asset_ids
 
 
-def get_h5_info(filepath: Path) -> Dict:
+def yield_multimodal_text_embeddings_h5(
+    filepath: Path,
+    batch_size: int = 1000
+):
     """
-    Get information about an HDF5 embeddings file.
+    Yield multimodal text embeddings from HDF5 file in batches.
     
     Args:
         filepath: Path to HDF5 file
+        batch_size: Number of items per yield
     
-    Returns:
-        Dictionary with file information
+    Yields:
+        Tuple of (batch_ids, en_embeddings, cn_embeddings)
     """
+    with h5py.File(filepath, 'r') as f:
+        en_group = f.get('english')
+        cn_group = f.get('chinese')
+        
+        # Get all unique asset IDs and map them
+        en_ids = []
+        if en_group:
+            en_ids = en_group['asset_ids'][:]
+            if isinstance(en_ids[0], bytes):
+                en_ids = [aid.decode('utf-8') for aid in en_ids]
+        
+        cn_ids = []
+        if cn_group:
+            cn_ids = cn_group['asset_ids'][:]
+            if isinstance(cn_ids[0], bytes):
+                cn_ids = [aid.decode('utf-8') for aid in cn_ids]
+        
+        all_asset_ids = sorted(list(set(en_ids) | set(cn_ids)))
+        total_items = len(all_asset_ids)
+        
+        en_id_to_idx = {aid: i for i, aid in enumerate(en_ids)}
+        cn_id_to_idx = {aid: i for i, aid in enumerate(cn_ids)}
+        
+        for i in range(0, total_items, batch_size):
+            end_idx = min(i + batch_size, total_items)
+            batch_ids = all_asset_ids[i:end_idx]
+            
+            en_batch = None
+            if en_group:
+                en_indices = [en_id_to_idx[aid] for aid in batch_ids if aid in en_id_to_idx]
+                if en_indices:
+                    # Sort for performance, then map back to batch_ids order
+                    idx_map = {idx: pos for pos, idx in enumerate(en_indices)}
+                    sorted_en_indices = sorted(en_indices)
+                    sorted_en_embs = en_group['embeddings'][sorted_en_indices]
+                    
+                    en_batch = np.zeros((len(batch_ids), en_group['embeddings'].shape[1]), dtype='float32')
+                    # This part is still a bit slow but better than total load
+                    for j, aid in enumerate(batch_ids):
+                        if aid in en_id_to_idx:
+                            orig_idx = en_id_to_idx[aid]
+                            # Find where this orig_idx went in the sorted array
+                            # Actually, a simpler way:
+                            pass
+                    
+                    # Simpler way to map back:
+                    temp_map = {idx: emb for idx, emb in zip(sorted_en_indices, sorted_en_embs)}
+                    for j, aid in enumerate(batch_ids):
+                        if aid in en_id_to_idx:
+                            en_batch[j] = temp_map[en_id_to_idx[aid]]
+                        else:
+                            en_batch[j] = 0 # Or some indicator
+            
+            cn_batch = None
+            if cn_group:
+                cn_indices = [cn_id_to_idx[aid] for aid in batch_ids if aid in cn_id_to_idx]
+                if cn_indices:
+                    sorted_cn_indices = sorted(cn_indices)
+                    sorted_cn_embs = cn_group['embeddings'][sorted_cn_indices]
+                    temp_map = {idx: emb for idx, emb in zip(sorted_cn_indices, sorted_cn_embs)}
+                    
+                    cn_batch = np.zeros((len(batch_ids), cn_group['embeddings'].shape[1]), dtype='float32')
+                    for j, aid in enumerate(batch_ids):
+                        if aid in cn_id_to_idx:
+                            cn_batch[j] = temp_map[cn_id_to_idx[aid]]
+                        else:
+                            cn_batch[j] = 0
+            
+            yield batch_ids, en_batch, cn_batch
     info = {}
     
     with h5py.File(filepath, 'r') as f:

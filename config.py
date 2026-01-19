@@ -17,7 +17,9 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 CAPTIONS_FILE = DATA_DIR / "text_captions_cap3d.json"
 CAPTIONS_CN_FILE = DATA_DIR / "text_captions_cap3d_cn.json"
 GOBJAVERSE_DIR = DATA_DIR / "gobjaverse"
-INDEX_MAPPING_FILE = DATA_DIR / "gobjaverse_280k_index_to_objaverse.json"
+INDEX_MAPPING_FILE = DATA_DIR / "gobjaverse_index_to_objaverse.json"
+INDEX_MAPPING_FILE_WITH_IMAGE = DATA_DIR / "gobjaverse_280k_index_to_objaverse.json"
+HIGH_QUALITY_ASSETS_FILE = DATA_DIR / "kiui_gobj_merged.json"
 
 # Output directories
 EMBEDDINGS_DIR = OUTPUTS_DIR / "embeddings"
@@ -77,11 +79,11 @@ QWEN_NUM_IMAGES = 8  # Number of images to sample per asset for Qwen embedding
 # ==================== Backend/Frontend Configuration ====================
 # Backend API
 BACKEND_HOST = "0.0.0.0"
-BACKEND_PORT = 8000
+BACKEND_PORT = 8001
 
 # Frontend Gradio
 FRONTEND_HOST = "0.0.0.0"
-FRONTEND_PORT = 7860
+FRONTEND_PORT = 7864
 
 # 3D Model download URL template
 # Placeholder - will be configured with actual URL

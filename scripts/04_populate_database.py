@@ -5,16 +5,16 @@ This script:
 1. Creates PostgreSQL databases if they don't exist
 2. Enables pgvector extension
 3. Creates tables for text and image embeddings
-4. Loads embeddings from disk
-5. Inserts embeddings into database
+4. Loads embeddings from disk into memory
+5. Inserts embeddings into database using efficient bulk operations
 6. Creates vector indexes for fast similarity search
 """
 import sys
 import logging
 from pathlib import Path
-from typing import Dict, List
 import numpy as np
-from tqdm import tqdm
+import json
+from psycopg2.extras import execute_values
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -40,6 +40,19 @@ class DatabasePopulator:
     
     def __init__(self):
         self.data_loader = DataLoader()
+        self.high_quality_ids = self._load_quality_flags()
+    
+    def _load_quality_flags(self) -> set:
+        """Load high quality asset IDs."""
+        if not config.HIGH_QUALITY_ASSETS_FILE.exists():
+            logger.warning(f"High quality assets file not found: {config.HIGH_QUALITY_ASSETS_FILE}")
+            return set()
+            
+        logger.info(f"Loading high quality assets from {config.HIGH_QUALITY_ASSETS_FILE}...")
+        with open(config.HIGH_QUALITY_ASSETS_FILE, 'r') as f:
+            ids = set(json.load(f))
+        logger.info(f"Found {len(ids)} high quality assets")
+        return ids
     
     def create_siglip_tables(self, db: DatabaseManager, embedding_dim: int):
         """
@@ -56,6 +69,7 @@ class DatabasePopulator:
         CREATE TABLE IF NOT EXISTS text_embeddings (
             asset_id VARCHAR(255) PRIMARY KEY,
             english_embedding vector({embedding_dim}),
+            is_high_quality BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
@@ -67,6 +81,7 @@ class DatabasePopulator:
             asset_id VARCHAR(255),
             viewpoint_idx INTEGER,
             embedding vector({embedding_dim}),
+            is_high_quality BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(asset_id, viewpoint_idx)
         );
@@ -74,6 +89,14 @@ class DatabasePopulator:
         
         db.execute_query(text_table_sql)
         db.execute_query(image_table_sql)
+
+        # Ensure columns exist (in case tables existed without them)
+        db.execute_query("ALTER TABLE text_embeddings ADD COLUMN IF NOT EXISTS is_high_quality BOOLEAN DEFAULT FALSE;")
+        db.execute_query("ALTER TABLE image_embeddings ADD COLUMN IF NOT EXISTS is_high_quality BOOLEAN DEFAULT FALSE;")
+        
+        # Create indexes for is_high_quality
+        db.execute_query("CREATE INDEX IF NOT EXISTS text_is_high_quality_idx ON text_embeddings (is_high_quality);")
+        db.execute_query("CREATE INDEX IF NOT EXISTS image_is_high_quality_idx ON image_embeddings (is_high_quality);")
         
         logger.info("SigLip tables created successfully")
     
@@ -93,6 +116,7 @@ class DatabasePopulator:
             asset_id VARCHAR(255) PRIMARY KEY,
             english_embedding vector({embedding_dim}),
             chinese_embedding vector({embedding_dim}),
+            is_high_quality BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
@@ -103,12 +127,21 @@ class DatabasePopulator:
             asset_id VARCHAR(255) PRIMARY KEY,
             embedding vector({embedding_dim}),
             num_images INTEGER,
+            is_high_quality BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
         
         db.execute_query(text_table_sql)
         db.execute_query(image_table_sql)
+
+        # Ensure columns exist
+        db.execute_query("ALTER TABLE text_embeddings ADD COLUMN IF NOT EXISTS is_high_quality BOOLEAN DEFAULT FALSE;")
+        db.execute_query("ALTER TABLE image_embeddings ADD COLUMN IF NOT EXISTS is_high_quality BOOLEAN DEFAULT FALSE;")
+        
+        # Create indexes for is_high_quality
+        db.execute_query("CREATE INDEX IF NOT EXISTS text_is_high_quality_idx ON text_embeddings (is_high_quality);")
+        db.execute_query("CREATE INDEX IF NOT EXISTS image_is_high_quality_idx ON image_embeddings (is_high_quality);")
         
         logger.info("Qwen tables created successfully")
     
@@ -155,32 +188,37 @@ class DatabasePopulator:
     def insert_siglip_text_embeddings(
         self,
         db: DatabaseManager,
-        text_embeddings: Dict[str, np.ndarray]
+        filepath: Path
     ):
-        """Insert SigLip text embeddings."""
-        logger.info(f"Inserting {len(text_embeddings)} SigLip text embeddings...")
+        """Insert SigLip text embeddings from HDF5 file."""
+        logger.info(f"Loading SigLip text embeddings from {filepath}...")
         
+        # Load all data into memory
+        embeddings_dict = load_text_embeddings_h5(filepath)
+        logger.info(f"Loaded {len(embeddings_dict)} embeddings. Preparing insertion...")
+        
+        data_to_insert = []
+        for asset_id, embedding in embeddings_dict.items():
+            is_hq = asset_id in self.high_quality_ids
+            data_to_insert.append((asset_id, embedding.tolist(), is_hq))
+            
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            
             try:
-                for asset_id, embedding in tqdm(text_embeddings.items(), desc="Inserting text"):
-                    # Convert numpy array to list for pgvector
-                    embedding_list = embedding.tolist()
-                    
-                    cursor.execute(
-                        """
-                        INSERT INTO text_embeddings (asset_id, english_embedding)
-                        VALUES (%s, %s)
-                        ON CONFLICT (asset_id) DO UPDATE
-                        SET english_embedding = EXCLUDED.english_embedding
-                        """,
-                        (asset_id, embedding_list)
-                    )
-                
+                execute_values(
+                    cursor,
+                    """
+                    INSERT INTO text_embeddings (asset_id, english_embedding, is_high_quality)
+                    VALUES %s
+                    ON CONFLICT (asset_id) DO UPDATE
+                    SET english_embedding = EXCLUDED.english_embedding,
+                        is_high_quality = EXCLUDED.is_high_quality
+                    """,
+                    data_to_insert,
+                    page_size=2000
+                )
                 conn.commit()
-                logger.info("SigLip text embeddings inserted successfully")
-                
+                logger.info(f"Inserted {len(data_to_insert)} SigLip text embeddings")
             except Exception as e:
                 conn.rollback()
                 logger.error(f"Error inserting text embeddings: {e}")
@@ -191,32 +229,37 @@ class DatabasePopulator:
     def insert_siglip_image_embeddings(
         self,
         db: DatabaseManager,
-        image_embeddings: Dict[str, List[np.ndarray]]
+        filepath: Path
     ):
-        """Insert SigLip image embeddings."""
-        logger.info(f"Inserting SigLip image embeddings for {len(image_embeddings)} assets...")
+        """Insert SigLip image embeddings from HDF5 file."""
+        logger.info(f"Loading SigLip image embeddings from {filepath}...")
         
+        embeddings_dict = load_image_embeddings_h5(filepath)
+        logger.info(f"Loaded embeddings for {len(embeddings_dict)} assets. Preparing insertion...")
+        
+        data_to_insert = []
+        for asset_id, embeddings_list in embeddings_dict.items():
+            is_hq = asset_id in self.high_quality_ids
+            for viewpoint_idx, embedding in enumerate(embeddings_list):
+                data_to_insert.append((asset_id, viewpoint_idx, embedding.tolist(), is_hq))
+                
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            
             try:
-                for asset_id, embeddings_list in tqdm(image_embeddings.items(), desc="Inserting images"):
-                    for viewpoint_idx, embedding in enumerate(embeddings_list):
-                        embedding_list = embedding.tolist()
-                        
-                        cursor.execute(
-                            """
-                            INSERT INTO image_embeddings (asset_id, viewpoint_idx, embedding)
-                            VALUES (%s, %s, %s)
-                            ON CONFLICT (asset_id, viewpoint_idx) DO UPDATE
-                            SET embedding = EXCLUDED.embedding
-                            """,
-                            (asset_id, viewpoint_idx, embedding_list)
-                        )
-                
+                execute_values(
+                    cursor,
+                    """
+                    INSERT INTO image_embeddings (asset_id, viewpoint_idx, embedding, is_high_quality)
+                    VALUES %s
+                    ON CONFLICT (asset_id, viewpoint_idx) DO UPDATE
+                    SET embedding = EXCLUDED.embedding,
+                        is_high_quality = EXCLUDED.is_high_quality
+                    """,
+                    data_to_insert,
+                    page_size=2000
+                )
                 conn.commit()
-                logger.info("SigLip image embeddings inserted successfully")
-                
+                logger.info(f"Inserted {len(data_to_insert)} SigLip image embeddings")
             except Exception as e:
                 conn.rollback()
                 logger.error(f"Error inserting image embeddings: {e}")
@@ -227,40 +270,45 @@ class DatabasePopulator:
     def insert_qwen_text_embeddings(
         self,
         db: DatabaseManager,
-        text_en_embeddings: Dict[str, np.ndarray],
-        text_cn_embeddings: Dict[str, np.ndarray]
+        filepath: Path
     ):
-        """Insert Qwen text embeddings."""
-        logger.info("Inserting Qwen text embeddings...")
+        """Insert Qwen text embeddings from HDF5 file."""
+        logger.info(f"Loading Qwen text embeddings from {filepath}...")
         
+        en_dict, cn_dict = load_multimodal_text_embeddings_h5(filepath)
+        all_asset_ids = set(en_dict.keys()) | set(cn_dict.keys())
+        logger.info(f"Loaded embeddings for {len(all_asset_ids)} assets. Preparing insertion...")
+        
+        data_to_insert = []
+        for asset_id in all_asset_ids:
+            is_hq = asset_id in self.high_quality_ids
+            
+            en_emb = en_dict.get(asset_id)
+            cn_emb = cn_dict.get(asset_id)
+            
+            en_list = en_emb.tolist() if en_emb is not None and not np.all(en_emb == 0) else None
+            cn_list = cn_emb.tolist() if cn_emb is not None and not np.all(cn_emb == 0) else None
+            
+            data_to_insert.append((asset_id, en_list, cn_list, is_hq))
+            
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            
             try:
-                # Get all asset IDs
-                all_asset_ids = set(text_en_embeddings.keys()) | set(text_cn_embeddings.keys())
-                
-                for asset_id in tqdm(all_asset_ids, desc="Inserting text"):
-                    en_embedding = text_en_embeddings.get(asset_id)
-                    cn_embedding = text_cn_embeddings.get(asset_id)
-                    
-                    en_list = en_embedding.tolist() if en_embedding is not None else None
-                    cn_list = cn_embedding.tolist() if cn_embedding is not None else None
-                    
-                    cursor.execute(
-                        """
-                        INSERT INTO text_embeddings (asset_id, english_embedding, chinese_embedding)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (asset_id) DO UPDATE
-                        SET english_embedding = COALESCE(EXCLUDED.english_embedding, text_embeddings.english_embedding),
-                            chinese_embedding = COALESCE(EXCLUDED.chinese_embedding, text_embeddings.chinese_embedding)
-                        """,
-                        (asset_id, en_list, cn_list)
-                    )
-                
+                execute_values(
+                    cursor,
+                    """
+                    INSERT INTO text_embeddings (asset_id, english_embedding, chinese_embedding, is_high_quality)
+                    VALUES %s
+                    ON CONFLICT (asset_id) DO UPDATE
+                    SET english_embedding = COALESCE(EXCLUDED.english_embedding, text_embeddings.english_embedding),
+                        chinese_embedding = COALESCE(EXCLUDED.chinese_embedding, text_embeddings.chinese_embedding),
+                        is_high_quality = EXCLUDED.is_high_quality
+                    """,
+                    data_to_insert,
+                    page_size=2000
+                )
                 conn.commit()
-                logger.info("Qwen text embeddings inserted successfully")
-                
+                logger.info(f"Inserted {len(data_to_insert)} Qwen text embeddings")
             except Exception as e:
                 conn.rollback()
                 logger.error(f"Error inserting text embeddings: {e}")
@@ -271,53 +319,55 @@ class DatabasePopulator:
     def insert_qwen_image_embeddings(
         self,
         db: DatabaseManager,
-        image_embeddings: Dict[str, np.ndarray]
+        filepath: Path
     ):
-        """Insert Qwen multi-image embeddings."""
-        logger.info(f"Inserting {len(image_embeddings)} Qwen image embeddings...")
+        """Insert Qwen multi-image embeddings from HDF5 file."""
+        logger.info(f"Loading Qwen image embeddings from {filepath}...")
         
+        # Qwen image embeddings are stored as 1 vector per asset (similar to text structure)
+        embeddings_dict = load_text_embeddings_h5(filepath)
+        logger.info(f"Loaded {len(embeddings_dict)} embeddings. Preparing insertion...")
+        
+        data_to_insert = []
+        for asset_id, embedding in embeddings_dict.items():
+            is_hq = asset_id in self.high_quality_ids
+            data_to_insert.append((asset_id, embedding.tolist(), config.QWEN_NUM_IMAGES, is_hq))
+            
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            
             try:
-                for asset_id, embedding in tqdm(image_embeddings.items(), desc="Inserting images"):
-                    embedding_list = embedding.tolist()
-                    
-                    cursor.execute(
-                        """
-                        INSERT INTO image_embeddings (asset_id, embedding, num_images)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (asset_id) DO UPDATE
-                        SET embedding = EXCLUDED.embedding,
-                            num_images = EXCLUDED.num_images
-                        """,
-                        (asset_id, embedding_list, config.QWEN_NUM_IMAGES)
-                    )
-                
+                execute_values(
+                    cursor,
+                    """
+                    INSERT INTO image_embeddings (asset_id, embedding, num_images, is_high_quality)
+                    VALUES %s
+                    ON CONFLICT (asset_id) DO UPDATE
+                    SET embedding = EXCLUDED.embedding,
+                        num_images = EXCLUDED.num_images,
+                        is_high_quality = EXCLUDED.is_high_quality
+                    """,
+                    data_to_insert,
+                    page_size=2000
+                )
                 conn.commit()
-                logger.info("Qwen image embeddings inserted successfully")
-                
+                logger.info(f"Inserted {len(data_to_insert)} Qwen image embeddings")
             except Exception as e:
                 conn.rollback()
                 logger.error(f"Error inserting image embeddings: {e}")
                 raise
             finally:
                 cursor.close()
-    
+
     def populate_siglip_database(self):
         """Populate SigLip database with embeddings."""
         logger.info("\n=== Populating SigLip Database ===")
         
-        # Load embeddings from HDF5
-        logger.info("Loading SigLip embeddings from HDF5...")
-        text_embeddings = load_text_embeddings_h5(config.SIGLIP_TEXT_EMBEDDINGS_FILE)
-        image_embeddings = load_image_embeddings_h5(config.SIGLIP_IMAGE_EMBEDDINGS_FILE)
-        
         # Get embedding dimension
-        embedding_dim = next(iter(text_embeddings.values())).shape[0]
+        import h5py
+        with h5py.File(config.SIGLIP_TEXT_EMBEDDINGS_FILE, 'r') as f:
+            embedding_dim = f.attrs['embedding_dim']
+        
         logger.info(f"Embedding dimension: {embedding_dim}")
-        logger.info(f"Loaded {len(text_embeddings)} text embeddings")
-        logger.info(f"Loaded image embeddings for {len(image_embeddings)} assets")
         
         # Initialize database
         db = get_siglip_db()
@@ -327,9 +377,9 @@ class DatabasePopulator:
         # Create tables
         self.create_siglip_tables(db, embedding_dim)
         
-        # Insert embeddings
-        self.insert_siglip_text_embeddings(db, text_embeddings)
-        self.insert_siglip_image_embeddings(db, image_embeddings)
+        # Insert embeddings (bulk)
+        self.insert_siglip_text_embeddings(db, config.SIGLIP_TEXT_EMBEDDINGS_FILE)
+        self.insert_siglip_image_embeddings(db, config.SIGLIP_IMAGE_EMBEDDINGS_FILE)
         
         # Create indexes
         self.create_vector_indexes(db, 'siglip')
@@ -343,19 +393,12 @@ class DatabasePopulator:
         """Populate Qwen database with embeddings."""
         logger.info("\n=== Populating Qwen Database ===")
         
-        # Load embeddings from HDF5
-        logger.info("Loading Qwen embeddings from HDF5...")
-        text_en_embeddings, text_cn_embeddings = load_multimodal_text_embeddings_h5(
-            config.QWEN_TEXT_EMBEDDINGS_FILE
-        )
-        image_embeddings = load_text_embeddings_h5(config.QWEN_IMAGE_EMBEDDINGS_FILE)
-        
         # Get embedding dimension
-        embedding_dim = next(iter(text_en_embeddings.values())).shape[0]
+        import h5py
+        with h5py.File(config.QWEN_TEXT_EMBEDDINGS_FILE, 'r') as f:
+            embedding_dim = f.attrs['embedding_dim']
+        
         logger.info(f"Embedding dimension: {embedding_dim}")
-        logger.info(f"Loaded {len(text_en_embeddings)} English text embeddings")
-        logger.info(f"Loaded {len(text_cn_embeddings)} Chinese text embeddings")
-        logger.info(f"Loaded {len(image_embeddings)} image embeddings")
         
         # Initialize database
         db = get_qwen_db()
@@ -365,9 +408,9 @@ class DatabasePopulator:
         # Create tables
         self.create_qwen_tables(db, embedding_dim)
         
-        # Insert embeddings
-        self.insert_qwen_text_embeddings(db, text_en_embeddings, text_cn_embeddings)
-        self.insert_qwen_image_embeddings(db, image_embeddings)
+        # Insert embeddings (bulk)
+        self.insert_qwen_text_embeddings(db, config.QWEN_TEXT_EMBEDDINGS_FILE)
+        self.insert_qwen_image_embeddings(db, config.QWEN_IMAGE_EMBEDDINGS_FILE)
         
         # Create indexes
         self.create_vector_indexes(db, 'qwen')
@@ -376,27 +419,31 @@ class DatabasePopulator:
         db.close_pool()
         
         logger.info("✓ Qwen database populated successfully")
+
+    def populate_qwen(self):
+        """Populate qwen database."""
+        if not config.QWEN_TEXT_EMBEDDINGS_FILE.exists():
+            logger.error(f"Qwen embeddings not found: {config.QWEN_TEXT_EMBEDDINGS_FILE}")
+            logger.error("Please run 03_embed_qwen.py first")
+            return
+        
+        # Populate Qwen database
+        self.populate_qwen_database()
+        
+        logger.info("\n✓ QWEN database populated successfully!")
     
-    def populate_all(self):
-        """Populate both databases."""
+    def populate_siglip(self):
+        """Populate siglip database."""
         # Check if embedding files exist
         if not config.SIGLIP_TEXT_EMBEDDINGS_FILE.exists():
             logger.error(f"SigLip text embeddings not found: {config.SIGLIP_TEXT_EMBEDDINGS_FILE}")
             logger.error("Please run 02_embed_siglip.py first")
             return
         
-        if not config.QWEN_TEXT_EMBEDDINGS_FILE.exists():
-            logger.error(f"Qwen embeddings not found: {config.QWEN_TEXT_EMBEDDINGS_FILE}")
-            logger.error("Please run 03_embed_qwen.py first")
-            return
-        
         # Populate SigLip database
         self.populate_siglip_database()
         
-        # Populate Qwen database
-        self.populate_qwen_database()
-        
-        logger.info("\n✓ All databases populated successfully!")
+        logger.info("\n✓ SIGLIP database populated successfully!")
 
 
 def main():
@@ -405,7 +452,7 @@ def main():
         config.validate_config()
         
         populator = DatabasePopulator()
-        populator.populate_all()
+        populator.populate_qwen()
         
     except Exception as e:
         logger.error(f"Database population failed: {e}", exc_info=True)

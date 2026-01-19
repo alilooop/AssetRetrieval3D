@@ -1,8 +1,8 @@
 dashscope
 openai 
 python-dotenv
-torch 
-transformers 
+torch # required for sigclip
+transformers # required for sigclip
 huggingface-hub 
 ruff 
 pgvector 
