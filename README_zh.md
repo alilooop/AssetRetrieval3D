@@ -10,13 +10,13 @@
 ![Demo](./assets/asset_retrieval_demo.gif)
 
 ## 1. 功能特性
-
-- **文本搜索**：支持英文或中文查询
-- **图像搜索**：使用图像查找相似的 3D 资产
+> *基于Cap3D提供的65w+英文标题，qwen翻译后的65w+中文标题，gobjaverse得到的数百万张图片渲染得到嵌入*
+- **文本搜索**：支持用英文或中文检索3D资产
+- **图像搜索**：使用单张RGB图像检索3D 资产
 - **跨模态检索**：以文图相似度或以图文相似度检索3D资产。
 - **双算法支持**：
-  - **SigLip**：快速，仅支持英文，对3D资产每个视角的渲染图生成一个Embedding。检索质量中等(WIP)。
-  - **Qwen3-VL-Embedding**：多语言，联合多图进行Embedding。检索质量高。
+  - **SigLip**：快速，仅支持英文，对3D资产每个视角的渲染图生成一个Embedding。检索质量中等(实现中)。
+  - **Qwen3-VL-Embedding**：双语嵌入，联合多图进行Embedding。检索质量高。
 - **向量数据库**：使用 PostgreSQL 和 pgvector 进行高效的相似度搜索
 - **Web 界面**：基于 Gradio 的美观 UI，包含 3D 模型查看器
 - **REST API**：用于程序化访问的 FastAPI 后端
@@ -55,22 +55,29 @@
 
 ## 3. 快速开始
 
-###前提条件
+### 前提条件
 - Python 3.8+
 - PostgreSQL 12+ (需安装 pgvector 扩展)
 - NVIDIA GPU (SigLip 推荐)
 - DashScope API key (Qwen 需要)
 
 ### 安装步骤
-1. **克隆仓库** (如适用)
+1. **克隆仓库**
+```bash 
+git clone https://github.com/3DSceneAgent/AssetRetrieval3D
+```
 
 2. **安装依赖**:
    ```bash
+   # 创建conda环境(可选)
+   conda create -n asset_retrieval python=3.10
+   conda activate asset_retrieval
    pip install -r requirements.txt
    ```
 
 3. **设置环境变量**:
    ```bash
+   cp .env.example .env
    export DASHSCOPE_API_KEY="your-api-key"
    export DB_HOST="localhost"
    export DB_PORT="5432"

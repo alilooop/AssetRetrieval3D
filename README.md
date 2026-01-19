@@ -10,13 +10,13 @@ A simple multi-modal 3D asset retrieval system. This repo uses objaverse as a si
 ![Demo](./assets/asset_retrieval_demo.gif)
 
 ## 1. Features
-
-- **Text Search**: Query in English or Chinese
-- **Image Search**: Find similar 3D assets using images
-- **Cross-Modal Retrieval**: Search images with text or text with images
+> *Demo built upon objaverse, using Cap3D 650k+ english captions, 650k+  translated captions ,and 260k+ gobjaverse asset renderings*
+- **Text Search**: Retrieve 3D assets in English or Chinese
+- **Image Search**: Retrieve 3D assets using a single RGB image
+- **Cross-Modal Retrieval**: Retrieve 3D assets using text2image or image2text similarities
 - **Dual Algorithms**:
   - **SigLip**: Fast, English-only, per-image embeddings. Medium Retrieval Quality(WIP).
-  - **Qwen3-VL-Embedding**: Multi-lingual, *multi-image* embeddings. High Retrieval Quality(Recommended).
+  - **Qwen3-VL-Embedding**: Bilingual, *multi-image* embeddings. High Retrieval Quality(Recommended).
 - **Vector Database**: PostgreSQL with pgvector for efficient similarity search
 - **Web Interface**: Beautiful Gradio UI with 3D model viewer
 - **REST API**: FastAPI backend for programmatic access
