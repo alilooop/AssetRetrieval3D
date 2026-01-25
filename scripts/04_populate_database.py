@@ -41,6 +41,19 @@ class DatabasePopulator:
     def __init__(self):
         self.data_loader = DataLoader()
         self.high_quality_ids = self._load_quality_flags()
+        self.valid_asset_ids = self._load_valid_assets()
+    
+    def _load_valid_assets(self) -> set:
+        """Load valid asset IDs."""
+        if not config.INDEX_MAPPING_FILE.exists():
+            logger.warning(f"Index mapping file not found: {config.INDEX_MAPPING_FILE}")
+            return set()
+            
+        logger.info(f"Loading valid assets from {config.INDEX_MAPPING_FILE}...")
+        with open(config.INDEX_MAPPING_FILE, 'r') as f:
+            data = json.load(f)
+        logger.info(f"Found {len(data)} valid assets")
+        return set(data.keys())
     
     def _load_quality_flags(self) -> set:
         """Load high quality asset IDs."""
@@ -199,6 +212,8 @@ class DatabasePopulator:
         
         data_to_insert = []
         for asset_id, embedding in embeddings_dict.items():
+            if asset_id not in self.valid_asset_ids:
+                continue
             is_hq = asset_id in self.high_quality_ids
             data_to_insert.append((asset_id, embedding.tolist(), is_hq))
             
@@ -239,6 +254,8 @@ class DatabasePopulator:
         
         data_to_insert = []
         for asset_id, embeddings_list in embeddings_dict.items():
+            if asset_id not in self.valid_asset_ids:
+                continue
             is_hq = asset_id in self.high_quality_ids
             for viewpoint_idx, embedding in enumerate(embeddings_list):
                 data_to_insert.append((asset_id, viewpoint_idx, embedding.tolist(), is_hq))
@@ -281,6 +298,8 @@ class DatabasePopulator:
         
         data_to_insert = []
         for asset_id in all_asset_ids:
+            if asset_id not in self.valid_asset_ids:
+                continue
             is_hq = asset_id in self.high_quality_ids
             
             en_emb = en_dict.get(asset_id)
@@ -330,6 +349,8 @@ class DatabasePopulator:
         
         data_to_insert = []
         for asset_id, embedding in embeddings_dict.items():
+            if asset_id not in self.valid_asset_ids:
+                continue
             is_hq = asset_id in self.high_quality_ids
             data_to_insert.append((asset_id, embedding.tolist(), config.QWEN_NUM_IMAGES, is_hq))
             

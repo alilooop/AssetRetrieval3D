@@ -90,7 +90,7 @@ class SigLipEmbedder:
         embeddings = []
         
         for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i : i + batch_size]
+            batch_texts = [t for t in texts[i : i + batch_size]]
             inputs = self.processor(
                 text=batch_texts,
                 return_tensors="pt",

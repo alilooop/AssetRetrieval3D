@@ -300,31 +300,28 @@ class QwenEmbedder:
         captions_en = self.data_loader.load_english_captions()
         captions_cn = self.data_loader.load_chinese_captions()
         
-        text_en_embeddings = text_cn_embeddings = None
-        if False:
-            # Limit if MAX_ASSETS is set
-            if config.MAX_ASSETS:
-                asset_ids = list(captions_en.keys())[:config.MAX_ASSETS]
-                captions_en = {aid: captions_en[aid] for aid in asset_ids if aid in captions_en}
-                captions_cn = {aid: captions_cn[aid] for aid in asset_ids if aid in captions_cn}
-                logger.info(f"Limited to {len(asset_ids)} assets for processing")
-            
-            # Generate English text embeddings
-            text_en_embeddings = self.generate_text_embeddings_parallel(captions_en, "en_text")
-            
-            # Generate Chinese text embeddings
-            if captions_cn:
-                text_cn_embeddings = self.generate_text_embeddings_parallel(captions_cn, "cn_text")
-            else:
-                logger.warning("No Chinese captions available, skipping Chinese text embeddings")
-                text_cn_embeddings = {}
+        # Limit if MAX_ASSETS is set
+        if config.MAX_ASSETS:
+            asset_ids = list(captions_en.keys())[:config.MAX_ASSETS]
+            captions_en = {aid: captions_en[aid] for aid in asset_ids if aid in captions_en}
+            captions_cn = {aid: captions_cn[aid] for aid in asset_ids if aid in captions_cn}
+            logger.info(f"Limited to {len(asset_ids)} assets for processing")
+        
+        # Generate English text embeddings
+        text_en_embeddings = self.generate_text_embeddings_parallel(captions_en, "en_text")
+        
+        # Generate Chinese text embeddings
+        if captions_cn:
+            text_cn_embeddings = self.generate_text_embeddings_parallel(captions_cn, "cn_text")
+        else:
+            logger.warning("No Chinese captions available, skipping Chinese text embeddings")
+            text_cn_embeddings = {}
         
         # Generate multi-image embeddings ONLY for assets with gobjaverse images
         asset_ids_with_images = self.data_loader.get_asset_ids_with_images(max_assets=config.MAX_ASSETS)
         logger.info(f"Generating image embeddings for {len(asset_ids_with_images)} assets with images")
         
         image_embeddings = self.generate_image_embeddings_parallel(asset_ids_with_images)
-        # image_embeddings = None
         
         # Save to disk
         self.save_embeddings(text_en_embeddings, text_cn_embeddings, image_embeddings)
